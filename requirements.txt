@@ -1,0 +1,23 @@
+# Core data processing
+pandas>=1.3.0
+numpy>=1.21.0
+
+# Optimization & ML
+torch>=1.10.0
+pyepo>=0.3.0
+gurobipy>=10.0.0
+
+# Utilities
+pyyaml>=5.4
+tqdm>=4.62.0
+python-dateutil>=2.8.2
+
+# Visualization
+matplotlib>=3.4.0
+seaborn>=0.11.0
+
+# Data download
+yfinance>=0.1.70
+
+# Hyperparameter tuning (optional)
+optuna>=2.10.0
