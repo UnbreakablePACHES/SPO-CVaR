@@ -9,7 +9,6 @@ start_date: "2019-01-01"
 end_date: "2025-12-31"
 backtest_start_date: "2020-01-01"
 
-add_vix: False
 prediction_return_clip: null
 prediction_return_rescale_range: [-0.1, 0.1]
 feature_normalization: True

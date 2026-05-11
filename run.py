@@ -3,7 +3,6 @@ import yaml
 import argparse
 import pandas as pd
 from datetime import datetime
-from typing import Optional
 from scripts.data_preprocess import preprocess_etf_features
 from utils.trainer import SPOTrainer
 from utils.backtester import SPOBacktester
@@ -14,12 +13,9 @@ from utils.metrics import StrategyEvaluator
 from utils.baselines import BaselineRunner
 
 
-def _load_config(config_path: str, add_vix_arg: Optional[str]):
+def _load_config(config_path: str):
     with open(config_path, "r", encoding="utf-8") as f:
-        cfg = yaml.safe_load(f)
-    if add_vix_arg is not None:
-        cfg["add_vix"] = add_vix_arg.lower() == "true"
-    return cfg
+        return yaml.safe_load(f)
 
 
 def _build_experiment_dir(output_dir: str, config_name: str):
@@ -51,7 +47,6 @@ def _parse_float_range(value):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, default="configs/config.yaml")
-    parser.add_argument("--add_vix", type=str, default=None)
     parser.add_argument("--model_type", type=str, default=None)
     parser.add_argument("--prediction_return_clip", type=str, default=None)
     parser.add_argument("--prediction_return_rescale_range", type=str, default=None)
@@ -64,7 +59,7 @@ def main():
     args = parser.parse_args()
 
     config_name = os.path.splitext(os.path.basename(args.config))[0]
-    cfg = _load_config(args.config, args.add_vix)
+    cfg = _load_config(args.config)
     if args.output_dir is not None:
         cfg["output_dir"] = args.output_dir
     exp_dir = _build_experiment_dir(cfg["output_dir"], config_name)
@@ -119,22 +114,11 @@ def main():
     with open(os.path.join(exp_dir, "exp_config.yaml"), "w", encoding="utf-8") as f:
         yaml.dump(cfg, f)
 
-    vix_df = None
-    if cfg["add_vix"]:
-        vix_path = os.path.join(cfg["data_dir"], "^VIX.csv")
-        if os.path.exists(vix_path):
-            vix_df = pd.read_csv(vix_path)
-        else:
-            logger.error("Missing VIX data")
-            raise FileNotFoundError(f"VIX 数据文件不存在: {vix_path}")
-
     feat_df = preprocess_etf_features(
         etf_data=etf_data,
-        vix_df=vix_df,
         etf_universe=tickers,
         start_date=cfg["start_date"],
         end_date=cfg["end_date"],
-        add_vix=cfg["add_vix"],
     )
 
     model_params = {**cfg["hyperparams"], **cfg["model_args"], "seed": cfg["seed"]}

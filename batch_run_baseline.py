@@ -89,20 +89,11 @@ def run_one(dataset, config_path, risk_aversion, output_root):
         for ticker in tickers
     }
 
-    vix_df = None
-    if cfg.get("add_vix"):
-        vix_path = Path(cfg["data_dir"]) / "^VIX.csv"
-        if not vix_path.exists():
-            raise FileNotFoundError(f"Missing VIX data: {vix_path}")
-        vix_df = pd.read_csv(vix_path)
-
     feat_df = preprocess_etf_features(
         etf_data=etf_data,
-        vix_df=vix_df,
         etf_universe=tickers,
         start_date=cfg["start_date"],
         end_date=cfg["end_date"],
-        add_vix=cfg.get("add_vix", False),
     )
 
     baseline_runner = BaselineRunner(
