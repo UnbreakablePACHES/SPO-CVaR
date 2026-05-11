@@ -1,0 +1,13 @@
+tickers:
+  - EEM
+  - EFA
+  - JPXN
+  - SPY
+  - XLK
+  - VTI
+  - AGG
+  - DBC
+
+start_date: "2014-01-01"
+end_date: "2025-12-31"
+data_dir: "data/raw/A_etfs"

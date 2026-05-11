@@ -1,0 +1,35 @@
+tickers:
+  - MMM
+  - AXP
+  - AMGN
+  - AMZN
+  - AAPL
+  - BA
+  - CAT
+  - CVX
+  - CSCO
+  - KO
+  - DIS
+  - GS
+  - HD
+  - HON
+  - IBM
+  - JNJ
+  - JPM
+  - MCD
+  - MRK
+  - MSFT
+  - NKE
+  - NVDA
+  - PG
+  - CRM
+  - SHW
+  - TRV
+  - UNH
+  - VZ
+  - V
+  - WMT
+
+start_date: "2014-01-01"
+end_date: "2025-12-31"
+data_dir: "data/raw/DOW30"

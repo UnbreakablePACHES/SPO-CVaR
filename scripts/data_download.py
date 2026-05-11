@@ -19,6 +19,18 @@ def _load_config(config_path):
         return yaml.safe_load(f)
 
 
+def _validate_params(tickers, start_date, output_dir):
+    """验证必填参数，返回错误消息列表"""
+    missing = []
+    if not tickers:
+        missing.append("--tickers")
+    if not start_date:
+        missing.append("--start_date")
+    if not output_dir:
+        missing.append("--output_dir")
+    return missing
+
+
 def main():
     parser = argparse.ArgumentParser(description="量化回测数据下载 + 预处理一体化工具")
 
@@ -59,12 +71,6 @@ def main():
         help="预处理结果保存路径（CSV）。不填则自动生成到 data/processed/ 下。",
     )
     parser.add_argument(
-        "--add_vix",
-        type=lambda x: x.lower() == "true",
-        default=None,
-        help="是否下载并加入 VIX 特征，覆盖 config 中的 add_vix。示例: --add_vix True",
-    )
-    parser.add_argument(
         "--no_preprocess",
         action="store_true",
         help="只下载，跳过预处理步骤。",
@@ -80,28 +86,20 @@ def main():
     tickers = args.tickers or cfg.get("tickers")
     start_date = args.start_date or cfg.get("start_date")
     end_date = args.end_date or cfg.get("end_date")
-    output_dir = args.output_dir or cfg.get("data_dir")
-    add_vix = args.add_vix if args.add_vix is not None else cfg.get("add_vix", False)
-
-    # 若启用 VIX，自动追加到下载列表
-    download_tickers = list(tickers) if tickers else []
-    if add_vix and "^VIX" not in download_tickers:
-        download_tickers.append("^VIX")
+    output_dir = args.output_dir or cfg.get("data_dir", "data/raw")
 
     # 校验必填项
-    missing = [
-        name
-        for name, val in [
-            ("tickers", tickers),
-            ("start_date", start_date),
-            ("output_dir", output_dir),
-        ]
-        if not val
-    ]
+    missing = _validate_params(tickers, start_date, output_dir)
     if missing:
         parser.error(
-            f"以下参数未提供（可通过 --config 或 CLI 指定）: {', '.join('--' + m for m in missing)}"
+            f"以下参数未提供（可通过 --config 或 CLI 指定）: {', '.join(missing)}"
         )
+
+    # 下载列表
+    download_tickers = list(tickers) if tickers else []
+
+    # 创建输出目录
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
 
     # ===== 步骤 1：下载 =====
     print("\n" + "=" * 50)
@@ -143,22 +141,11 @@ def main():
         else:
             print(f"⚠️  找不到 {csv_path}，跳过该 ticker。")
 
-    vix_df = None
-    if add_vix:
-        vix_path = raw_dir / "^VIX.csv"
-        if vix_path.exists():
-            vix_df = pd.read_csv(vix_path)
-        else:
-            print("⚠️  add_vix=True 但找不到 ^VIX.csv，已忽略 VIX 特征。")
-            add_vix = False
-
     feat_df = preprocess_etf_features(
         etf_data=etf_data,
-        vix_df=vix_df,
         etf_universe=list(etf_data.keys()),
         start_date=start_date,
         end_date=end_date,
-        add_vix=add_vix,
     )
 
     # 决定输出路径

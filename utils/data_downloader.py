@@ -2,7 +2,7 @@ import yfinance as yf
 import pandas as pd
 from pathlib import Path
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Dict
 from tqdm import tqdm
 
 
@@ -92,6 +92,48 @@ class StockDataDownloader:
         # 循环结束后，把进度条文字改为完成
         pbar.set_description("全部完成      ")
         return results
+
+    def quick_download(
+        self,
+        tickers: List[str],
+        start_date: str = "2020-01-01",
+        end_date: Optional[str] = None,
+        verbose: bool = True,
+    ) -> Dict[str, bool]:
+        """
+        快速下载函数（推荐用于脚本和 Jupyter）
+
+        :param tickers: 股票代码列表
+        :param start_date: 开始日期 (默认 2020-01-01)
+        :param end_date: 结束日期 (默认今日)
+        :param verbose: 是否打印总结
+        :return: 下载结果字典
+        """
+        print(f"\n📥 开始下载 {len(tickers)} 支资产...")
+        print(f"   时间范围: {start_date} → {end_date or '今日'}")
+
+        results = self.batch_download(
+            tickers=tickers, start_date=start_date, end_date=end_date
+        )
+
+        if verbose:
+            success = sum(1 for v in results.values() if v)
+            fail = len(results) - success
+            print(f"✅ 成功: {success} 支 | ❌ 失败: {fail} 支")
+
+        return results
+
+    def get_data_df(self, ticker: str) -> Optional[pd.DataFrame]:
+        """
+        直接读取已下载的 CSV 文件（返回 DataFrame）
+
+        :param ticker: 股票代码
+        :return: DataFrame 或 None
+        """
+        csv_path = self.output_dir / f"{ticker}.csv"
+        if csv_path.exists():
+            return pd.read_csv(csv_path, index_col=0, parse_dates=True)
+        return None
 
 
 # ==========================================
