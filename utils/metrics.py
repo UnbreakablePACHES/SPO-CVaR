@@ -55,6 +55,7 @@ class StrategyEvaluator:
         r = returns_df.loc[common_dates, daily_weights.columns].values
 
         turnover_series = np.zeros(len(common_dates))
+        rebalance_turnovers = []
         weights_for_turnover = weights_df.copy()
         weights_for_turnover.index = pd.to_datetime(weights_for_turnover.index)
 
@@ -80,9 +81,10 @@ class StrategyEvaluator:
                 continue
 
             trade_dt = valid_trade_dates[0]
-            turnover_series[common_dates.get_loc(trade_dt)] = np.sum(
-                np.abs(cur_w - prev_w)
-            )
+            turnover = np.sum(np.abs(cur_w - prev_w))
+            turnover_series[common_dates.get_loc(trade_dt)] = turnover
+            if i > 0:
+                rebalance_turnovers.append(turnover)
 
         # 计算收益
         if self.returns_type == "log":
@@ -105,11 +107,7 @@ class StrategyEvaluator:
         peak = np.maximum.accumulate(equity_curve)
         drawdown = (equity_curve - peak) / peak
         max_drawdown = np.min(drawdown)
-        avg_turnover = (
-            np.mean(turnover_series[turnover_series > 0])
-            if np.count_nonzero(turnover_series) > 0
-            else 0.0
-        )
+        avg_turnover = np.mean(rebalance_turnovers) if rebalance_turnovers else 0.0
 
         return {
             "Total Return": total_return,

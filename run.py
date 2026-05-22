@@ -56,12 +56,22 @@ def main():
     parser.add_argument("--cov_history", type=int, default=None)
     parser.add_argument("--context_history", type=int, default=None)
     parser.add_argument("--output_dir", type=str, default=None)
+    parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument(
+        "--skip_baselines",
+        action="store_true",
+        help="Only run/evaluate the SPO model and skip Markowitz/PTO baselines.",
+    )
     args = parser.parse_args()
 
     config_name = os.path.splitext(os.path.basename(args.config))[0]
     cfg = _load_config(args.config)
     if args.output_dir is not None:
         cfg["output_dir"] = args.output_dir
+    if args.seed is not None:
+        cfg["seed"] = args.seed
+    if args.skip_baselines:
+        cfg["skip_baselines"] = True
     exp_dir = _build_experiment_dir(cfg["output_dir"], config_name)
 
     logger = ProjectLogger.get_logger()
@@ -111,15 +121,50 @@ def main():
             "prediction_return_rescale_range, not both"
         )
 
-    with open(os.path.join(exp_dir, "exp_config.yaml"), "w", encoding="utf-8") as f:
-        yaml.dump(cfg, f)
-
     feat_df = preprocess_etf_features(
         etf_data=etf_data,
         etf_universe=tickers,
         start_date=cfg["start_date"],
         end_date=cfg["end_date"],
     )
+
+    tuning_cfg = cfg.get("tuning", {}) or {}
+    n_trials = int(tuning_cfg.get("n_trials", 0) or 0)
+    if n_trials > 0:
+        from utils.tuner import SPOHyperTuner
+
+        logger.info(f"Starting SPO hyperparameter tuning: n_trials={n_trials}")
+        tuner = SPOHyperTuner(
+            df=feat_df,
+            model_type=cfg["model_type"],
+            n_assets=len(tickers),
+            base_hyperparams=cfg["hyperparams"],
+            model_args=cfg["model_args"],
+            seed=cfg["seed"],
+            n_trials=n_trials,
+            trading_days_path=cfg.get("trading_days_path"),
+            objective_metric=tuning_cfg.get("objective_metric", "Sharpe Ratio"),
+            search_space=tuning_cfg.get("search_space"),
+            backtest_kwargs={
+                "test_start_date": cfg.get("backtest_start_date"),
+                "normalize_features": cfg.get("feature_normalization", True),
+                "prediction_return_clip": prediction_return_clip,
+                "prediction_return_rescale_range": prediction_return_rescale_range,
+                "weight_adjust_delta": cfg["hyperparams"].get("weight_adjust_delta"),
+            },
+        )
+        study = tuner.tune()
+        cfg["hyperparams"].update(study.best_params)
+        cfg.setdefault("tuning", {})
+        cfg["tuning"]["best_value"] = float(study.best_value)
+        cfg["tuning"]["best_params"] = dict(study.best_params)
+        study.trials_dataframe().to_csv(
+            os.path.join(exp_dir, "tuning_trials.csv"), index=False
+        )
+        SeedManager.set_seed(cfg["seed"])
+
+    with open(os.path.join(exp_dir, "exp_config.yaml"), "w", encoding="utf-8") as f:
+        yaml.safe_dump(cfg, f, sort_keys=False, allow_unicode=True)
 
     model_params = {**cfg["hyperparams"], **cfg["model_args"], "seed": cfg["seed"]}
     opt_model = ModelFactory.get_opt_model(
@@ -184,6 +229,43 @@ def main():
     evaluator.plot_performance(
         model_metrics, os.path.join(exp_dir, "performance_charts.png")
     )
+
+    if cfg.get("skip_baselines", False):
+        all_metrics = {"SPO_Model": model_metrics}
+        evaluator.plot_comparison_equity(
+            all_metrics,
+            os.path.join(exp_dir, "comparison_equity_curve.png"),
+        )
+        evaluator.save_comparison_table(
+            all_metrics,
+            os.path.join(exp_dir, "comparison_metrics.csv"),
+        )
+
+        if cfg.get("save_feature_contribution", True):
+            feature_contrib_path = os.path.join(exp_dir, "feature_contributions.csv")
+            backtester.feature_contributions.to_csv(feature_contrib_path, index=False)
+            logger.info(f"Saved feature contributions: {feature_contrib_path}")
+
+            heatmap_path = os.path.join(exp_dir, "spo_feature_contribution_heatmap.png")
+            heatmap_matrix = backtester.plot_feature_contribution_heatmap(
+                save_path=heatmap_path,
+                use_abs=True,
+                aggfunc="mean",
+            )
+            if not heatmap_matrix.empty:
+                heatmap_csv_path = os.path.join(
+                    exp_dir, "spo_feature_contribution_timeseries.csv"
+                )
+                heatmap_matrix.to_csv(heatmap_csv_path)
+                logger.info(
+                    f"Saved SPO feature contribution time series: {heatmap_csv_path}"
+                )
+                logger.info(f"Saved SPO feature contribution heatmap: {heatmap_path}")
+            else:
+                logger.warning("Feature contributions are empty; skipped heatmap.")
+
+        logger.info("skip_baselines=True: skipped Markowitz/PTO baselines.")
+        return
 
     # ===== 新增：两个 baseline（Markowitz / SimpleLinear+Markowitz PO） =====
     baseline_runner = BaselineRunner(
